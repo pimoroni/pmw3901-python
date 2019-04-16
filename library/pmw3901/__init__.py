@@ -10,7 +10,9 @@ BG_CS_BACK_BCM = 8
 
 REG_ID = 0x00
 REG_DATA_READY = 0x02
-REG_BURST = 0x16
+REG_MOTION_BURST = 0x16
+REG_POWER_UP_RESET = 0x3a
+REG_ORIENTATION = 0x5b
 
 
 class PMW3901():
@@ -24,7 +26,15 @@ class PMW3901():
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.spi_cs_gpio, GPIO.OUT)
+
+        GPIO.output(self.spi_cs_gpio, 0)
+        time.sleep(0.05)
         GPIO.output(self.spi_cs_gpio, 1)
+
+        self._write(REG_POWER_UP_RESET, 0x5a)
+        time.sleep(0.02)
+        for offset in range(5):
+            self._read(REG_DATA_READY + offset)
 
         self._secret_sauce()
 
@@ -38,29 +48,66 @@ class PMW3901():
         """Get chip ID and revision from PMW3901."""
         return self._read(REG_ID, 2)
 
-    def get_motion_burst(self, timeout=5):
+    def set_rotation(self, degrees=0):
+        """Set orientation of PMW3901 in increments of 90 degrees."""
+        # TODO Determine set_orientation calls
+        # for 0, 90, 180 and 270 degree rotations
+        pass
+
+    def set_orientation(self, invert_x=True, invert_y=True, swap_xy=True):
+        """Set orientation of PMW3901 manually.
+
+        Swapping is performed before flipping.
+
+        :param invert_x: invert the X axis
+        :param invert_y: invert the Y axis
+        :param swap_xy: swap the X/Y axes
+
+        """
+        value = 0
+        if swap_xy:
+            value |= 0b10000000
+        if invert_y:
+            value |= 0b01000000
+        if invert_x:
+            value |= 0b00100000
+        self._write(REG_ORIENTATION, value)
+
+    def get_motion(self, timeout=5):
         """Get motion data from PMW3901 using burst read.
+
+        Reads 12 bytes sequentially from the PMW3901 and validates
+        motion data against the SQUAL and Shutter_Upper values.
+
+        Returns Delta X and Delta Y indicating 2d flow direction
+        and magnitude.
 
         :param timeout: Timeout in seconds
 
         """
         t_start = time.time()
         while time.time() - t_start < timeout:
-            data = self._burst_read(REG_BURST, 12)
-            (dr, obs,
+            GPIO.output(self.spi_cs_gpio, 0)
+            data = self.spi_dev.xfer2([REG_MOTION_BURST] + [0 for x in range(12)])
+            GPIO.output(self.spi_cs_gpio, 1)
+            (_, dr, obs,
              x, y, quality,
              raw_sum, raw_max, raw_min,
              shutter_upper,
-             shutter_lower) = struct.unpack("<BBhhBBBBBB", bytearray(data))
+             shutter_lower) = struct.unpack("<BBBhhBBBBBB", bytearray(data))
 
             if dr & 0b10000000 and quality >= 0x19 and shutter_upper != 0x1f:
                 return x, y
+
             time.sleep(0.001)
 
         raise TimeoutError("Timed out waiting for motion data.")
 
-    def get_motion(self, timeout=5):
+    def get_motion_slow(self, timeout=5):
         """Get motion data from PMW3901.
+
+        Returns Delta X and Delta Y indicating 2d flow direction
+        and magnitude.
 
         :param timeout: Timeout in seconds
 
@@ -79,12 +126,6 @@ class PMW3901():
         GPIO.output(7, 0)
         self.spi_dev.xfer2([register | 0x80, value])
         GPIO.output(7, 1)
-
-    def _burst_read(self, register, length=12):
-        GPIO.output(self.spi_cs_gpio, 0)
-        data = self.spi_dev.xfer2([register] + [0 for x in range(length)])
-        GPIO.output(self.spi_cs_gpio, 1)
-        return data[1:]
 
     def _read(self, register, length=1):
         result = []
@@ -111,9 +152,9 @@ class PMW3901():
 
     def _secret_sauce(self):
         """Write the secret sauce registers.
-        
+
         Don't ask what these do, the datasheet refuses to explain.
-        
+
         They are some proprietary calibration magic.
 
         """
@@ -221,7 +262,7 @@ class PMW3901():
             0x7f, 0x07,
             0x40, 0x41,
             0x70, 0x00,
-            WAIT, 0x0A,  # Sleep for 10ms   
+            WAIT, 0x0A,  # Sleep for 10ms
 
             0x32, 0x44,
             0x7f, 0x07,
@@ -247,11 +288,11 @@ class PMW3901():
 
 
 if __name__ == "__main__":
-    flo = PMW3901(spi_port=0, spi_cs=1)
+    flo = PMW3901(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM)
     try:
         while True:
-            x, y = flo.get_motion_burst()
+            x, y = flo.get_motion()
             print("Motion: {:06d} {:06d}".format(x, y))
-            time.sleep(0.1)
+            time.sleep(0.01)
     except KeyboardInterrupt:
         pass
