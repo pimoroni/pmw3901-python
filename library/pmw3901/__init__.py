@@ -10,6 +10,8 @@ BG_CS_BACK_BCM = 8
 
 REG_ID = 0x00
 REG_DATA_READY = 0x02
+REG_BURST = 0x16
+
 
 class PMW3901():
     def __init__(self, spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM):
@@ -33,11 +35,33 @@ class PMW3901():
         # print("Revision: {}".format(ID.get_revision_id()))
 
     def get_id(self):
+        """Get chip ID and revision from PMW3901."""
         return self._read(REG_ID, 2)
+
+    def get_motion_burst(self, timeout=5):
+        """Get motion data from PMW3901 using burst read.
+
+        :param timeout: Timeout in seconds
+
+        """
+        t_start = time.time()
+        while time.time() - t_start < timeout:
+            data = self._burst_read(REG_BURST, 12)
+            (dr, obs,
+             x, y, quality,
+             raw_sum, raw_max, raw_min,
+             shutter_upper,
+             shutter_lower) = struct.unpack("<BBhhBBBBBB", bytearray(data))
+
+            if dr & 0b10000000 and quality >= 0x19 and shutter_upper != 0x1f:
+                return x, y
+            time.sleep(0.001)
+
+        raise TimeoutError("Timed out waiting for motion data.")
 
     def get_motion(self, timeout=5):
         """Get motion data from PMW3901.
-        
+
         :param timeout: Timeout in seconds
 
         """
@@ -55,6 +79,12 @@ class PMW3901():
         GPIO.output(7, 0)
         self.spi_dev.xfer2([register | 0x80, value])
         GPIO.output(7, 1)
+
+    def _burst_read(self, register, length=12):
+        GPIO.output(self.spi_cs_gpio, 0)
+        data = self.spi_dev.xfer2([register] + [0 for x in range(length)])
+        GPIO.output(self.spi_cs_gpio, 1)
+        return data[1:]
 
     def _read(self, register, length=1):
         result = []
@@ -215,11 +245,12 @@ class PMW3901():
             0x7f, 0x00
         ])
 
+
 if __name__ == "__main__":
     flo = PMW3901(spi_port=0, spi_cs=1)
     try:
         while True:
-            x, y = flo.get_motion()
+            x, y = flo.get_motion_burst()
             print("Motion: {:06d} {:06d}".format(x, y))
             time.sleep(0.1)
     except KeyboardInterrupt:
