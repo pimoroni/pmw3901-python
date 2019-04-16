@@ -65,7 +65,7 @@ class PMW3901():
             result.append(value[1])
 
         if length == 1:
-            return result[1]
+            return result[0]
         else:
             return result
 
