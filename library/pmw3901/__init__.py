@@ -1,8 +1,6 @@
 import time
 import struct
 import spidev
-from i2cdevice import Device, Register, BitField, _int_to_bytes
-from i2cdevice.adapter import LookupAdapter, Adapter
 import RPi.GPIO as GPIO
 
 WAIT = -1
@@ -10,35 +8,8 @@ WAIT = -1
 BG_CS_FRONT_BCM = 7
 BG_CS_BACK_BCM = 8
 
-class S16Adapter(Adapter):
-    """Convert from bytes to a signed 16bit integer."""
-
-    def _decode(self, value):
-        return struct.unpack('<h', _int_to_bytes(value, 2))[0]
-
-
-class SPItoI2CDevice():
-    def __init__(self, spi_device, spi_cs_gpio):
-        self.spi = spi_device
-        self.spi_cs_gpio = spi_cs_gpio
-
-    def write_i2c_block_data(self, address, register, values):
-        for offset, value in enumerate(values):
-            GPIO.output(self.spi_cs_gpio, 0)
-            self.spi.xfer2([(register + offset) | 0x80, value])
-            GPIO.output(self.spi_cs_gpio, 1)
-
-    def read_i2c_block_data(self, address, register, length):
-        result = []
-        for x in range(length):
-            GPIO.output(self.spi_cs_gpio, 0)
-            value = self.spi.xfer2([register + x, 0])
-            GPIO.output(self.spi_cs_gpio, 1)
-            # print("SPI READ: ", value)
-            result.append(value[1])
-
-        return result
-
+REG_ID = 0x00
+REG_DATA_READY = 0x02
 
 class PMW3901():
     def __init__(self, spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM):
@@ -55,46 +26,48 @@ class PMW3901():
 
         self._secret_sauce()
 
-        self._pwm3901 = Device([0x00], i2c_dev=SPItoI2CDevice(self.spi_dev, self.spi_cs_gpio), bit_width=8, registers=(
-            Register('ID', 0x00, fields=(
-                BitField('product_id', 0xFF00),
-                BitField('revision_id', 0x00FF)
-            ), bit_width=16),
-            Register('MOTION', 0x02, fields=(
-                BitField('data_ready', 0x8000000000),
-                BitField('delta_x', 0x00FFFF0000, adapter=S16Adapter()),
-                BitField('delta_y', 0x000000FFFF, adapter=S16Adapter())
-            ), bit_width=40)
-        ))
+        product_id, revision = self.get_id()
+        if product_id != 0x49 or revision != 0x00:
+            raise RuntimeError("Invalid Product ID or Revision for PMW3901: 0x{:02x}/0x{:02x}".format(product_id, revision))
+        # print("Product ID: {}".format(ID.get_product_id()))
+        # print("Revision: {}".format(ID.get_revision_id()))
 
-        with self._pwm3901.ID as ID:
-            product_id = ID.get_product_id()
-            revision = ID.get_revision_id()
-            if product_id != 0x49 or revision != 0x00:
-                raise RuntimeError("Invalid Product ID or Revision for PMW3901: 0x{:02x}/0x{:02x}".format(product_id, revision))
-            # print("Product ID: {}".format(ID.get_product_id()))
-            # print("Revision: {}".format(ID.get_revision_id()))
+    def get_id(self):
+        return self._read(REG_ID, 2)
 
-    def get_motion(self):
-        for x in range(10):
-            with self._pwm3901.MOTION as MOTION:
-                if not MOTION.get_data_ready():
-                    continue
-                return MOTION.get_delta_x(), MOTION.get_delta_y()
+    def get_motion(self, timeout=5):
+        """Get motion data from PMW3901.
+        
+        :param timeout: Timeout in seconds
+
+        """
+        t_start = time.time()
+        while time.time() - t_start < timeout:
+            data = self._read(REG_DATA_READY, 5)
+            dr, x, y = struct.unpack("<Bhh", bytearray(data))
+            if dr & 0b10000000:
+                return x, y
             time.sleep(0.001)
 
-        return 0, 0
+        raise TimeoutError("Timed out waiting for motion data.")
 
     def _write(self, register, value):
         GPIO.output(7, 0)
         self.spi_dev.xfer2([register | 0x80, value])
         GPIO.output(7, 1)
 
-    def _read(self, register):
-        GPIO.output(7, 0)
-        result = self.spi_dev.xfer2([register, 0])
-        GPIO.output(7, 1)
-        return result[1]
+    def _read(self, register, length=1):
+        result = []
+        for x in range(length):
+            GPIO.output(self.spi_cs_gpio, 0)
+            value = self.spi_dev.xfer2([register + x, 0])
+            GPIO.output(self.spi_cs_gpio, 1)
+            result.append(value[1])
+
+        if length == 1:
+            return result[1]
+        else:
+            return result
 
     def _bulk_write(self, data):
         for x in range(0, len(data), 2):
