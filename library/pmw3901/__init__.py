@@ -49,10 +49,21 @@ class PMW3901():
         return self._read(REG_ID, 2)
 
     def set_rotation(self, degrees=0):
-        """Set orientation of PMW3901 in increments of 90 degrees."""
-        # TODO Determine set_orientation calls
-        # for 0, 90, 180 and 270 degree rotations
-        pass
+        """Set orientation of PMW3901 in increments of 90 degrees.
+
+        :param degrees: rotation in multiple of 90 degrees
+
+        """
+        if degrees == 0:
+            self.set_orientation(invert_x=True, invert_y=True, swap_xy=True)
+        elif degrees == 90:
+            self.set_orientation(invert_x=False, invert_y=True, swap_xy=False)
+        elif degrees == 180:
+            self.set_orientation(invert_x=False, invert_y=False, swap_xy=True)
+        elif degrees == 270:
+            self.set_orientation(invert_x=True, invert_y=False, swap_xy=False)
+        else:
+            raise TypeError("Degrees must be one of 0, 90, 180 or 270")
 
     def set_orientation(self, invert_x=True, invert_y=True, swap_xy=True):
         """Set orientation of PMW3901 manually.
