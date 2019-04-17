@@ -107,12 +107,12 @@ class PMW3901():
              shutter_upper,
              shutter_lower) = struct.unpack("<BBBhhBBBBBB", bytearray(data))
 
-            if dr & 0b10000000 and quality >= 0x19 and shutter_upper != 0x1f:
+            if dr & 0b10000000 and not (quality < 0x19 and shutter_upper == 0x1f):
                 return x, y
 
-            time.sleep(0.001)
+            time.sleep(0.01)
 
-        raise TimeoutError("Timed out waiting for motion data.")
+        raise RuntimeError("Timed out waiting for motion data.")
 
     def get_motion_slow(self, timeout=5):
         """Get motion data from PMW3901.
@@ -131,7 +131,7 @@ class PMW3901():
                 return x, y
             time.sleep(0.001)
 
-        raise TimeoutError("Timed out waiting for motion data.")
+        raise RuntimeError("Timed out waiting for motion data.")
 
     def _write(self, register, value):
         GPIO.output(7, 0)
@@ -300,9 +300,13 @@ class PMW3901():
 
 if __name__ == "__main__":
     flo = PMW3901(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM)
+    flo.set_orientation(swap_xy=True)
     try:
         while True:
-            x, y = flo.get_motion()
+            try:
+                x, y = flo.get_motion()
+            except RuntimeError:
+                continue
             print("Motion: {:06d} {:06d}".format(x, y))
             time.sleep(0.01)
     except KeyboardInterrupt:
