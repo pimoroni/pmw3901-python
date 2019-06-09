@@ -153,7 +153,7 @@ class PMW3901():
 
     def _bulk_write(self, data):
         for x in range(0, len(data), 2):
-            register, value = data[x:x+2]
+            register, value = data[x:x + 2]
             if register == WAIT:
                 # print("Sleeping for: {:02d}ms".format(value))
                 time.sleep(value / 1000)
