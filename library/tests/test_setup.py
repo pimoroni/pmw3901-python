@@ -24,3 +24,4 @@ def test_setup():
     from pmw3901 import PMW3901
     pmw3901 = PMW3901()
     del pmw3901
+

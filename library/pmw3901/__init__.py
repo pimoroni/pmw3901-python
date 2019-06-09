@@ -3,6 +3,10 @@ import struct
 import spidev
 import RPi.GPIO as GPIO
 
+
+__version__ = '0.0.1'
+
+
 WAIT = -1
 
 BG_CS_FRONT_BCM = 7
