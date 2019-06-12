@@ -3,6 +3,8 @@ import struct
 import spidev
 import RPi.GPIO as GPIO
 
+__version__ = '0.0.1'
+
 WAIT = -1
 
 BG_CS_FRONT_BCM = 7
@@ -134,9 +136,9 @@ class PMW3901():
         raise RuntimeError("Timed out waiting for motion data.")
 
     def _write(self, register, value):
-        GPIO.output(7, 0)
+        GPIO.output(self.spi_cs_gpio, 0)
         self.spi_dev.xfer2([register | 0x80, value])
-        GPIO.output(7, 1)
+        GPIO.output(self.spi_cs_gpio, 1)
 
     def _read(self, register, length=1):
         result = []
@@ -299,15 +301,25 @@ class PMW3901():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--rotation', type=int,
+                        default=0, choices=[0, 90, 180, 270],
+                        help='Rotation of sensor in degrees.', )
+    args = parser.parse_args()
     flo = PMW3901(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM)
-    flo.set_orientation(swap_xy=True)
+    flo.set_rotation(args.rotation)
+    tx = 0
+    ty = 0
     try:
         while True:
             try:
                 x, y = flo.get_motion()
             except RuntimeError:
                 continue
-            print("Motion: {:06d} {:06d}".format(x, y))
+            tx += x
+            ty += y
+            print("Motion: {:03d} {:03d} x: {:03d} y {:03d}".format(x, y, tx, ty))
             time.sleep(0.01)
     except KeyboardInterrupt:
         pass

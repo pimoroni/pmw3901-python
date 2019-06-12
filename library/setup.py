@@ -47,6 +47,7 @@ setup(
     license='MIT',
     keywords='Raspberry Pi',
     url='http://www.pimoroni.com',
+    project_urls={'GitHub': 'https://www.github.com/pimoroni/pmw3901-python'},
     classifiers=classifiers,
     packages=['pmw3901'],
     install_requires=['spidev']
