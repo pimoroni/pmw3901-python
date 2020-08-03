@@ -18,7 +18,7 @@ REG_ORIENTATION = 0x5b
 
 
 class PMW3901():
-    def __init__(self, spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM):
+    def __init__(self, spi_port=0, spi_cs_gpio=BG_CS_FRONT_BCM):
         self.spi_cs_gpio = spi_cs_gpio
         self.spi_dev = spidev.SpiDev()
         self.spi_dev.open(spi_port, spi_cs)
@@ -307,7 +307,7 @@ if __name__ == "__main__":
                         default=0, choices=[0, 90, 180, 270],
                         help='Rotation of sensor in degrees.', )
     args = parser.parse_args()
-    flo = PMW3901(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM)
+    flo = PMW3901(spi_port=0, spi_cs_gpio=BG_CS_FRONT_BCM)
     flo.set_rotation(args.rotation)
     tx = 0
     ty = 0
