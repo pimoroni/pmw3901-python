@@ -25,6 +25,10 @@ class PMW3901():
     def __init__(self, spi_port=0, spi_cs_gpio=BG_CS_FRONT_BCM):
         self.spi_cs_gpio = spi_cs_gpio
         self.spi_dev = spidev.SpiDev()
+        try:
+            spi_cs = [8, 7].index(spi_cs_gpio)
+        except IndexError:
+            spi_cs = 0
         self.spi_dev.open(spi_port, spi_cs)
         self.spi_dev.max_speed_hz = 400000
         self.spi_dev.no_cs = True
