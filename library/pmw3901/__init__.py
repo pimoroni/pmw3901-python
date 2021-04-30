@@ -17,6 +17,9 @@ REG_POWER_UP_RESET = 0x3a
 REG_ORIENTATION = 0x5b
 REG_RESOLUTION = 0x4e  # PAA5100 only
 
+REG_RAWDATA_GRAB = 0x58
+REG_RAWDATA_GRAB_STATUS = 0x59
+
 
 class PMW3901():
     def __init__(self, spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM):
@@ -300,30 +303,61 @@ class PMW3901():
             0x7f, 0x00
         ])
 
+    def frame_capture(self, timeout=10.0):
+        """Capture a raw data frame.
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--rotation', type=int,
-                        default=0, choices=[0, 90, 180, 270],
-                        help='Rotation of sensor in degrees.', )
-    args = parser.parse_args()
-    flo = PMW3901(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM)
-    flo.set_rotation(args.rotation)
-    tx = 0
-    ty = 0
-    try:
+        Warning: This is *very* slow and of limited usefulness.
+
+        """
+        self._bulk_write([
+            0x7f, 0x07,
+            0x4c, 0x00,
+            0x7f, 0x08,
+            0x6a, 0x38,
+            0x7f, 0x00,
+            0x55, 0x04,
+            0x40, 0x80,
+            0x4d, 0x11,
+
+            WAIT, 0x0a,
+
+            0x7f, 0x00,
+            0x58, 0xff
+        ])
+
+        t_start = time.time()
+
         while True:
-            try:
-                x, y = flo.get_motion()
-            except RuntimeError:
-                continue
-            tx += x
-            ty += y
-            print("Motion: {:03d} {:03d} x: {:03d} y {:03d}".format(x, y, tx, ty))
-            time.sleep(0.01)
-    except KeyboardInterrupt:
-        pass
+            status = self._read(REG_RAWDATA_GRAB_STATUS)
+            if status & 0b11000000:
+                break
+
+            if time.time() - t_start > timeout:
+                raise RuntimeError("Frame capture init timed out")
+
+        self._write(REG_RAWDATA_GRAB, 0x00)
+
+        RAW_DATA_LEN = 1225
+
+        t_start = time.time()
+        raw_data = [0 for _ in range(RAW_DATA_LEN)]
+        x = 0
+
+        while True:
+            data = self._read(REG_RAWDATA_GRAB)
+            if data & 0b11000000 == 0b01000000:  # Upper 6-bits
+                raw_data[x] &= ~0b11111100
+                raw_data[x] |= (data & 0b00111111) << 2         # Held in 5:0
+            if data & 0b11000000 == 0b10000000:  # Lower 2-bits
+                raw_data[x] &= ~0b00000011
+                raw_data[x] |= (data & 0b00001100) >> 2   # Held in 3:2
+                x += 1
+            if x == RAW_DATA_LEN:
+                return raw_data
+            if time.time() - t_start > timeout:
+                raise RuntimeError("Raw data capture timeout, got {} values".format(x))
+
+        return None
 
 
 class PAA5100(PMW3901):
@@ -483,3 +517,28 @@ class PAA5100(PMW3901):
 
             0x73, 0x00
         ])
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--rotation', type=int,
+                        default=0, choices=[0, 90, 180, 270],
+                        help='Rotation of sensor in degrees.', )
+    args = parser.parse_args()
+    flo = PMW3901(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM)
+    flo.set_rotation(args.rotation)
+    tx = 0
+    ty = 0
+    try:
+        while True:
+            try:
+                x, y = flo.get_motion()
+            except RuntimeError:
+                continue
+            tx += x
+            ty += y
+            print("Motion: {:03d} {:03d} x: {:03d} y {:03d}".format(x, y, tx, ty))
+            time.sleep(0.01)
+    except KeyboardInterrupt:
+        pass
