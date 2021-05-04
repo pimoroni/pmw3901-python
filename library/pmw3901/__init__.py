@@ -15,6 +15,10 @@ REG_DATA_READY = 0x02
 REG_MOTION_BURST = 0x16
 REG_POWER_UP_RESET = 0x3a
 REG_ORIENTATION = 0x5b
+REG_RESOLUTION = 0x4e  # PAA5100 only
+
+REG_RAWDATA_GRAB = 0x58
+REG_RAWDATA_GRAB_STATUS = 0x59
 
 
 class PMW3901():
@@ -297,6 +301,221 @@ class PMW3901():
             0x7f, 0x14,  # Enable LED_N pulsing
             0x6f, 0x1c,
             0x7f, 0x00
+        ])
+
+    def frame_capture(self, timeout=10.0):
+        """Capture a raw data frame.
+
+        Warning: This is *very* slow and of limited usefulness.
+
+        """
+        self._bulk_write([
+            0x7f, 0x07,
+            0x4c, 0x00,
+            0x7f, 0x08,
+            0x6a, 0x38,
+            0x7f, 0x00,
+            0x55, 0x04,
+            0x40, 0x80,
+            0x4d, 0x11,
+
+            WAIT, 0x0a,
+
+            0x7f, 0x00,
+            0x58, 0xff
+        ])
+
+        t_start = time.time()
+
+        while True:
+            status = self._read(REG_RAWDATA_GRAB_STATUS)
+            if status & 0b11000000:
+                break
+
+            if time.time() - t_start > timeout:
+                raise RuntimeError("Frame capture init timed out")
+
+        self._write(REG_RAWDATA_GRAB, 0x00)
+
+        RAW_DATA_LEN = 1225
+
+        t_start = time.time()
+        raw_data = [0 for _ in range(RAW_DATA_LEN)]
+        x = 0
+
+        while True:
+            data = self._read(REG_RAWDATA_GRAB)
+            if data & 0b11000000 == 0b01000000:  # Upper 6-bits
+                raw_data[x] &= ~0b11111100
+                raw_data[x] |= (data & 0b00111111) << 2         # Held in 5:0
+            if data & 0b11000000 == 0b10000000:  # Lower 2-bits
+                raw_data[x] &= ~0b00000011
+                raw_data[x] |= (data & 0b00001100) >> 2   # Held in 3:2
+                x += 1
+            if x == RAW_DATA_LEN:
+                return raw_data
+            if time.time() - t_start > timeout:
+                raise RuntimeError("Raw data capture timeout, got {} values".format(x))
+
+        return None
+
+
+class PAA5100(PMW3901):
+    def _secret_sauce(self):
+        """Write the secret sauce registers for the PAA5100.
+
+        Don't ask what these do, we'd have to make you walk the plank.
+
+        These are some proprietary calibration magic.
+
+        I hate this as much as you do, dear reader.
+
+        """
+        self._bulk_write([
+            0x7f, 0x00,
+            0x55, 0x01,
+            0x50, 0x07,
+
+            0x7f, 0x0e,
+            0x43, 0x10
+        ])
+        if self._read(0x67) & 0b10000000:
+            self._write(0x48, 0x04)
+        else:
+            self._write(0x48, 0x02)
+        self._bulk_write([
+            0x7f, 0x00,
+            0x51, 0x7b,
+            0x50, 0x00,
+            0x55, 0x00,
+            0x7f, 0x0e
+        ])
+        if self._read(0x73) == 0x00:
+            c1 = self._read(0x70)
+            c2 = self._read(0x71)
+            if c1 <= 28:
+                c1 += 14
+            if c1 > 28:
+                c1 += 11
+            c1 = max(0, min(0x3F, c1))
+            c2 = (c2 * 45) // 100
+            self._bulk_write([
+                0x7f, 0x00,
+                0x61, 0xad,
+                0x51, 0x70,
+                0x7f, 0x0e
+            ])
+            self._write(0x70, c1)
+            self._write(0x71, c2)
+        self._bulk_write([
+            0x7f, 0x00,
+            0x61, 0xad,
+
+            0x7f, 0x03,
+            0x40, 0x00,
+
+            0x7f, 0x05,
+            0x41, 0xb3,
+            0x43, 0xf1,
+            0x45, 0x14,
+
+            0x5f, 0x34,
+            0x7b, 0x08,
+            0x5e, 0x34,
+            0x5b, 0x11,
+            0x6d, 0x11,
+            0x45, 0x17,
+            0x70, 0xe5,
+            0x71, 0xe5,
+
+            0x7f, 0x06,
+            0x44, 0x1b,
+            0x40, 0xbf,
+            0x4e, 0x3f,
+
+            0x7f, 0x08,
+            0x66, 0x44,
+            0x65, 0x20,
+            0x6a, 0x3a,
+            0x61, 0x05,
+            0x62, 0x05,
+
+            0x7f, 0x09,
+            0x4f, 0xaf,
+            0x5f, 0x40,
+            0x48, 0x80,
+            0x49, 0x80,
+            0x57, 0x77,
+            0x60, 0x78,
+            0x61, 0x78,
+            0x62, 0x08,
+            0x63, 0x50,
+
+            0x7f, 0x0a,
+            0x45, 0x60,
+
+            0x7f, 0x00,
+            0x4d, 0x11,
+            0x55, 0x80,
+            0x74, 0x21,
+            0x75, 0x1f,
+            0x4a, 0x78,
+            0x4b, 0x78,
+            0x44, 0x08,
+
+            0x45, 0x50,
+            0x64, 0xff,
+            0x65, 0x1f,
+
+            0x7f, 0x14,
+            0x65, 0x67,
+            0x66, 0x08,
+            0x63, 0x70,
+            0x6f, 0x1c,
+
+            0x7f, 0x15,
+            0x48, 0x48,
+
+            0x7f, 0x07,
+            0x41, 0x0d,
+            0x43, 0x14,
+            0x4b, 0x0e,
+            0x45, 0x0f,
+            0x44, 0x42,
+            0x4c, 0x80,
+
+            0x7f, 0x10,
+            0x5b, 0x02,
+
+            0x7f, 0x07,
+            0x40, 0x41,
+
+            WAIT, 0x0a,  # Wait 10ms
+
+            0x7f, 0x00,
+            0x32, 0x00,
+
+            0x7f, 0x07,
+            0x40, 0x40,
+
+            0x7f, 0x06,
+            0x68, 0xf0,
+            0x69, 0x00,
+
+            0x7f, 0x0d,
+            0x48, 0xc0,
+            0x6f, 0xd5,
+
+            0x7f, 0x00,
+            0x5b, 0xa0,
+            0x4e, 0xa8,
+            0x5a, 0x90,
+            0x40, 0x80,
+            0x73, 0x1f,
+
+            WAIT, 0x0a,  # Wait 10ms
+
+            0x73, 0x00
         ])
 
 
