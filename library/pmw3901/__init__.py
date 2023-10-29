@@ -120,7 +120,8 @@ class PMW3901():
             if dr & 0b10000000 and not (quality < 0x19 and shutter_upper == 0x1f):
                 return x, y
 
-            time.sleep(0.01)
+            if time.time() - t_start < timeout:
+                time.sleep(1e-4)  # sleep if within timeout, don't waste time otherwise
 
         raise RuntimeError("Timed out waiting for motion data.")
 
