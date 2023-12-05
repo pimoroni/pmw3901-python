@@ -1,5 +1,6 @@
-import pytest
 import struct
+
+import pytest
 
 
 def test_get_motion_timeout(GPIO, spidev, PMW3901):

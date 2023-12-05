@@ -1,7 +1,8 @@
-import time
 import struct
-import spidev
+import time
+
 import RPi.GPIO as GPIO
+import spidev
 
 __version__ = '0.1.0'
 

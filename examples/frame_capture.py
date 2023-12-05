@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-import time
 import argparse
-from pmw3901 import PMW3901, PAA5100, BG_CS_FRONT_BCM, BG_CS_BACK_BCM
+import time
+
+from pmw3901 import BG_CS_BACK_BCM, BG_CS_FRONT_BCM, PAA5100, PMW3901
 
 print("""frame_capture.py - Capture the raw frame data from the PMW3901
 
