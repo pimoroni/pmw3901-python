@@ -12,19 +12,19 @@ def test_setup(GPIO, spidev, PMW3901):
 def test_setup_invalid_gpio(GPIO, spidev, PMW3901):
     pmw3901 = PMW3901(spi_cs_gpio=20)
 
-    assert spidev.SpiDev.open.called_with(0, 0)
+    spidev.SpiDev().open.assert_called_with(0, 0)
 
     del pmw3901
 
 
 def test_setup_bg_front(GPIO, spidev, PMW3901):
     PMW3901(spi_cs_gpio=7)
-    assert spidev.SpiDev.open.called_with(0, 1)
+    spidev.SpiDev().open.assert_called_with(0, 1)
 
 
 def test_setup_bg_back(GPIO, spidev, PMW3901):
     PMW3901(spi_cs_gpio=8)
-    assert spidev.SpiDev.open.called_with(0, 0)
+    spidev.SpiDev().open.assert_called_with(0, 0)
 
 
 def test_setup_not_present(GPIO, spidev, PMW3901):
