@@ -3,14 +3,14 @@ import struct
 import pytest
 
 
-def test_get_motion_timeout(GPIO, spidev, PMW3901):
+def test_get_motion_timeout(gpiod, gpiodevice, spidev, PMW3901):
     pmw3901 = PMW3901()
 
     with pytest.raises(RuntimeError):
         pmw3901.get_motion(timeout=0.1)
 
 
-def test_get_motion(GPIO, spidev, PMW3901):
+def test_get_motion(gpiod, gpiodevice, spidev, PMW3901):
     pmw3901 = PMW3901()
 
     spidev._fakedev.regs[0x15:0x15 + 12] = list(

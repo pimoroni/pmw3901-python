@@ -1,8 +1,10 @@
 import struct
 import time
 
-import RPi.GPIO as GPIO
+import gpiod
+import gpiodevice
 import spidev
+from gpiod.line import Direction, Value
 
 __version__ = "0.1.0"
 
@@ -21,10 +23,13 @@ REG_RESOLUTION = 0x4E  # PAA5100 only
 REG_RAWDATA_GRAB = 0x58
 REG_RAWDATA_GRAB_STATUS = 0x59
 
+OUTL = gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE)
+
 
 class PMW3901:
+    _device_name = "PMW3901"
+
     def __init__(self, spi_port=0, spi_cs_gpio=BG_CS_FRONT_BCM):
-        self.spi_cs_gpio = spi_cs_gpio
         self.spi_dev = spidev.SpiDev()
         try:
             spi_cs = [8, 7].index(spi_cs_gpio)
@@ -32,15 +37,16 @@ class PMW3901:
             spi_cs = 0
         self.spi_dev.open(spi_port, spi_cs)
         self.spi_dev.max_speed_hz = 400000
-        self.spi_dev.no_cs = True
+        try:
+            self.spi_dev.no_cs = True
+        except OSError:
+            pass
 
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.spi_cs_gpio, GPIO.OUT)
+        self._spi_cs_gpio = gpiodevice.get_pin(spi_cs_gpio, f"{self._device_name}_cs", OUTL)
 
-        GPIO.output(self.spi_cs_gpio, 0)
+        self.set_pin(self._spi_cs_gpio, 0)
         time.sleep(0.05)
-        GPIO.output(self.spi_cs_gpio, 1)
+        self.set_pin(self._spi_cs_gpio, 1)
 
         self._write(REG_POWER_UP_RESET, 0x5A)
         time.sleep(0.02)
@@ -54,6 +60,10 @@ class PMW3901:
             raise RuntimeError(f"Invalid Product ID or Revision for PMW3901: 0x{product_id:02x}/0x{revision:02x}")
         # print("Product ID: {}".format(ID.get_product_id()))
         # print("Revision: {}".format(ID.get_revision_id()))
+
+    def set_pin(self, pin, state):
+        lines, offset = pin
+        lines.set_value(offset, Value.ACTIVE if state else Value.INACTIVE)
 
     def get_id(self):
         """Get chip ID and revision from PMW3901."""
@@ -109,9 +119,9 @@ class PMW3901:
         """
         t_start = time.time()
         while time.time() - t_start < timeout:
-            GPIO.output(self.spi_cs_gpio, 0)
+            self.set_pin(self._spi_cs_gpio, 0)
             data = self.spi_dev.xfer2([REG_MOTION_BURST] + [0 for x in range(12)])
-            GPIO.output(self.spi_cs_gpio, 1)
+            self.set_pin(self._spi_cs_gpio, 1)
             (_, dr, obs,
              x, y, quality,
              raw_sum, raw_max, raw_min,
@@ -145,16 +155,16 @@ class PMW3901:
         raise RuntimeError("Timed out waiting for motion data.")
 
     def _write(self, register, value):
-        GPIO.output(self.spi_cs_gpio, 0)
+        self.set_pin(self._spi_cs_gpio, 0)
         self.spi_dev.xfer2([register | 0x80, value])
-        GPIO.output(self.spi_cs_gpio, 1)
+        self.set_pin(self._spi_cs_gpio, 1)
 
     def _read(self, register, length=1):
         result = []
         for x in range(length):
-            GPIO.output(self.spi_cs_gpio, 0)
+            self.set_pin(self._spi_cs_gpio, 0)
             value = self.spi_dev.xfer2([register + x, 0])
-            GPIO.output(self.spi_cs_gpio, 1)
+            self.set_pin(self._spi_cs_gpio, 1)
             result.append(value[1])
 
         if length == 1:
@@ -366,6 +376,8 @@ class PMW3901:
 
 
 class PAA5100(PMW3901):
+    _device_name = "PAA5100"
+
     def _secret_sauce(self):
         """Write the secret sauce registers for the PAA5100.
 
