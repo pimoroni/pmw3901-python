@@ -6,7 +6,7 @@ import gpiodevice
 import spidev
 from gpiod.line import Direction, Value
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 WAIT = -1
 
