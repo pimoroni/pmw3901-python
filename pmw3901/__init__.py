@@ -10,8 +10,8 @@ __version__ = "0.1.0"
 
 WAIT = -1
 
-BG_CS_FRONT_BCM = 7
-BG_CS_BACK_BCM = 8
+BG_CS_FRONT_BCM = 1  # GPIO 8
+BG_CS_BACK_BCM = 0   # GPIO 7
 
 REG_ID = 0x00
 REG_DATA_READY = 0x02
@@ -29,20 +29,28 @@ OUTL = gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIV
 class PMW3901:
     _device_name = "PMW3901"
 
-    def __init__(self, spi_port=0, spi_cs_gpio=BG_CS_FRONT_BCM):
+    def __init__(self, spi_port=0, spi_cs=1, spi_cs_gpio=None):
         self.spi_dev = spidev.SpiDev()
-        self.spi_dev.open(spi_port, 0)
+        self._spi_cs_gpio = None
+
+        if spi_cs_gpio is not None:
+            spi_cs = 0
+            self._spi_cs_gpio = gpiodevice.get_pin(spi_cs_gpio, f"{self._device_name}_cs", OUTL)
+
+        self.spi_dev.open(spi_port, spi_cs)
         self.spi_dev.max_speed_hz = 400000
-        try:
-            self.spi_dev.no_cs = True
-        except OSError:
-            pass
 
-        self._spi_cs_gpio = gpiodevice.get_pin(spi_cs_gpio, f"{self._device_name}_cs", OUTL)
+        if spi_cs_gpio is not None:
+            try:
+                # TODO: Not sure this does anything but break with an OSError?
+                self.spi_dev.no_cs = True
+            except OSError:
+                pass
 
-        self.set_pin(self._spi_cs_gpio, 0)
-        time.sleep(0.05)
-        self.set_pin(self._spi_cs_gpio, 1)
+        if self._spi_cs_gpio:
+            self.set_pin(self._spi_cs_gpio, 0)
+            time.sleep(0.05)
+            self.set_pin(self._spi_cs_gpio, 1)
 
         self._write(REG_POWER_UP_RESET, 0x5A)
         time.sleep(0.02)
@@ -115,9 +123,11 @@ class PMW3901:
         """
         t_start = time.time()
         while time.time() - t_start < timeout:
-            self.set_pin(self._spi_cs_gpio, 0)
+            if self._spi_cs_gpio:
+                self.set_pin(self._spi_cs_gpio, 0)
             data = self.spi_dev.xfer2([REG_MOTION_BURST] + [0 for x in range(12)])
-            self.set_pin(self._spi_cs_gpio, 1)
+            if self._spi_cs_gpio:
+                self.set_pin(self._spi_cs_gpio, 1)
             (_, dr, obs,
              x, y, quality,
              raw_sum, raw_max, raw_min,
@@ -151,16 +161,20 @@ class PMW3901:
         raise RuntimeError("Timed out waiting for motion data.")
 
     def _write(self, register, value):
-        self.set_pin(self._spi_cs_gpio, 0)
+        if self._spi_cs_gpio:
+                self.set_pin(self._spi_cs_gpio, 0)
         self.spi_dev.xfer2([register | 0x80, value])
-        self.set_pin(self._spi_cs_gpio, 1)
+        if self._spi_cs_gpio:
+                self.set_pin(self._spi_cs_gpio, 1)
 
     def _read(self, register, length=1):
         result = []
         for x in range(length):
-            self.set_pin(self._spi_cs_gpio, 0)
+            if self._spi_cs_gpio:
+                self.set_pin(self._spi_cs_gpio, 0)
             value = self.spi_dev.xfer2([register + x, 0])
-            self.set_pin(self._spi_cs_gpio, 1)
+            if self._spi_cs_gpio:
+                self.set_pin(self._spi_cs_gpio, 1)
             result.append(value[1])
 
         if length == 1:

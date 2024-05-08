@@ -114,7 +114,5 @@ ignore = [
 
 [tool.pimoroni]
 apt_packages = []
-configtxt = [
-    "dtoverlay=spi0-0cs"
-]
+configtxt = []
 commands = []

@@ -1,8 +1,8 @@
 import pytest
 
 
-def test_setup(gpiod, gpiodevice, spidev, PMW3901):
-    pmw3901 = PMW3901()
+def test_setup_cs_gpio(gpiod, gpiodevice, spidev, PMW3901):
+    pmw3901 = PMW3901(spi_cs_gpio=7)
 
     OUTL = gpiod.LineSettings(direction=gpiod.Direction.OUTPUT, output_value=gpiod.Value.INACTIVE)
 

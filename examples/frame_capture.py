@@ -19,7 +19,7 @@ args = parser.parse_args()
 # Pick the right class for the specified breakout
 SensorClass = PMW3901 if args.board == "pmw3901" else PAA5100
 
-flo = SensorClass(spi_port=0, spi_cs=1, spi_cs_gpio=BG_CS_FRONT_BCM if args.spi_slot == "front" else BG_CS_BACK_BCM)
+flo = SensorClass(spi_port=0, spi_cs=BG_CS_FRONT_BCM if args.spi_slot == "front" else BG_CS_BACK_BCM)
 flo.set_rotation(args.rotation)
 
 

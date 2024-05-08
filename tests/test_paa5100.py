@@ -1,8 +1,8 @@
 import pytest
 
 
-def test_setup(gpiod, gpiodevice, spidev, PAA5100):
-    paa5100 = PAA5100()
+def test_setup_cs_gpio(gpiod, gpiodevice, spidev, PAA5100):
+    paa5100 = PAA5100(spi_cs_gpio=7)
 
     OUTL = gpiod.LineSettings(direction=gpiod.Direction.OUTPUT, output_value=gpiod.Value.INACTIVE)
 
