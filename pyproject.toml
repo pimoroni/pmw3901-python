@@ -35,7 +35,8 @@ classifiers = [
     "Topic :: System :: Hardware",
 ]
 dependencies = [
-    "spidev"
+    "spidev",
+    "gpiodevice>=0.1.0"
 ]
 
 [tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
