@@ -1,12 +1,16 @@
 import struct
 import time
+from importlib.metadata import PackageNotFoundError, version
 
 import gpiod
 import gpiodevice
 import spidev
 from gpiod.line import Direction, Value
 
-__version__ = "1.0.0"
+try:
+    __version__ = version("pmw3901")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 WAIT = -1
 
