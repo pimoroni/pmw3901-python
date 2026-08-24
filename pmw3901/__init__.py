@@ -1,3 +1,4 @@
+import contextlib
 import struct
 import time
 from importlib.metadata import PackageNotFoundError, version
@@ -45,11 +46,9 @@ class PMW3901:
         self.spi_dev.max_speed_hz = 400000
 
         if spi_cs_gpio is not None:
-            try:
-                # TODO: Not sure this does anything but break with an OSError?
+            # TODO: Not sure this does anything but break with an OSError?
+            with contextlib.suppress(OSError):
                 self.spi_dev.no_cs = True
-            except OSError:
-                pass
 
         if self._spi_cs_gpio:
             self.set_pin(self._spi_cs_gpio, 0)
@@ -132,11 +131,11 @@ class PMW3901:
             data = self.spi_dev.xfer2([REG_MOTION_BURST] + [0 for x in range(12)])
             if self._spi_cs_gpio:
                 self.set_pin(self._spi_cs_gpio, 1)
-            (_, dr, obs,
+            (_, dr, _obs,
              x, y, quality,
-             raw_sum, raw_max, raw_min,
+             _raw_sum, _raw_max, _raw_min,
              shutter_upper,
-             shutter_lower) = struct.unpack("<BBBhhBBBBBB", bytearray(data))
+             _shutter_lower) = struct.unpack("<BBBhhBBBBBB", bytearray(data))
 
             if dr & 0b10000000 and not (quality < 0x19 and shutter_upper == 0x1F):
                 return x, y
