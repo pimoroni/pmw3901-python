@@ -39,13 +39,10 @@ try:
             y = 35 - y - 1 if args.rotation in (180, 270) else y
             for x in range(35):
                 x = 35 - x - 1 if args.rotation in (180, 90) else x
-                if args.rotation in (90, 270):
-                    offset = (x * 35) + y
-                else:
-                    offset = (y * 35) + x
+                offset = x * 35 + y if args.rotation in (90, 270) else y * 35 + x
                 value = data[offset]
                 print(value_to_char(value), end="")
-            print("")
+            print()
         print("5...")
         time.sleep(1.0)
         print("4...")
